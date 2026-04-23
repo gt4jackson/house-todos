@@ -40,6 +40,28 @@
     overflow-x: hidden;
   }
 
+  /* ── Update Banner ── */
+  .update-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 600;
+    background: var(--accent); color: #fff;
+    padding: 12px 16px; text-align: center;
+    font-size: 0.9rem; font-weight: 600;
+    display: none; align-items: center; justify-content: center; gap: 12px;
+    animation: slideDown 0.3s ease;
+  }
+  .update-banner.show { display: flex; }
+  @keyframes slideDown { from { transform: translateY(-100%); } }
+  .update-banner button {
+    padding: 6px 16px; border-radius: 20px;
+    background: #fff; color: var(--accent);
+    border: none; font-weight: 700; font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .update-banner .dismiss {
+    background: transparent; color: rgba(255,255,255,0.8);
+    font-size: 1.2rem; padding: 4px 8px;
+  }
+
   /* ── Welcome Screen ── */
   .welcome-screen {
     position: fixed; inset: 0; z-index: 500;
@@ -116,6 +138,21 @@
   .sync-dot.syncing { background: var(--yellow); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: 0.4; } }
 
+  /* ── Pull to Refresh ── */
+  .pull-indicator {
+    text-align: center; overflow: hidden;
+    height: 0; transition: height 0.2s ease;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 0.8rem;
+  }
+  .pull-indicator .pull-icon {
+    display: inline-block; font-size: 1.2rem;
+    transition: transform 0.2s;
+  }
+  .pull-indicator.ready .pull-icon { transform: rotate(180deg); }
+  .pull-indicator.refreshing .pull-icon { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   /* ── Filter bar ── */
   .filter-bar {
     padding: 10px 16px;
@@ -144,8 +181,9 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 14px;
     margin-bottom: 8px; cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
     position: relative; overflow: hidden;
+    user-select: none; touch-action: pan-y;
   }
   .task-card:active { transform: scale(0.98); }
   .task-card .priority-stripe {
@@ -157,7 +195,25 @@
   .priority-4 .priority-stripe { background: var(--orange); }
   .priority-5 .priority-stripe { background: var(--red); }
 
-  .task-top { display: flex; align-items: flex-start; gap: 10px; }
+  /* Drag handle */
+  .drag-handle {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim); font-size: 1.1rem; opacity: 0.4;
+    padding: 8px; cursor: grab; touch-action: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
+
+  /* Dragging states */
+  .task-card.dragging {
+    opacity: 0.85; transform: scale(1.03);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    z-index: 50; position: relative;
+    border-color: var(--accent);
+  }
+  .task-card.drag-over-above { border-top: 2px solid var(--accent); margin-top: -2px; }
+  .task-card.drag-over-below { border-bottom: 2px solid var(--accent); margin-bottom: -2px; }
+
+  .task-top { display: flex; align-items: flex-start; gap: 10px; padding-right: 28px; }
   .task-check {
     width: 24px; height: 24px; border-radius: 50%;
     border: 2px solid var(--text-dim); flex-shrink: 0;
@@ -265,9 +321,7 @@
   .form-group textarea { resize: vertical; min-height: 60px; }
   .form-group select { appearance: none; cursor: pointer; }
 
-  .priority-selector {
-    display: flex; gap: 6px;
-  }
+  .priority-selector { display: flex; gap: 6px; }
   .priority-btn {
     flex: 1; padding: 8px; border-radius: 10px;
     background: var(--card); border: 2px solid transparent;
@@ -305,12 +359,8 @@
   .settings-section {
     padding: 16px; border-bottom: 1px solid var(--border);
   }
-  .settings-section h3 {
-    font-size: 0.9rem; margin-bottom: 8px;
-  }
-  .settings-section p {
-    font-size: 0.8rem; color: var(--text-dim); margin-bottom: 10px;
-  }
+  .settings-section h3 { font-size: 0.9rem; margin-bottom: 8px; }
+  .settings-section p { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 10px; }
   .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .member-tag {
     padding: 4px 10px; border-radius: 12px;
@@ -345,7 +395,6 @@
   .stat-card .num { font-size: 2rem; font-weight: 700; color: var(--accent); }
   .stat-card .label { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
 
-  /* Responsive for larger screens */
   @media (min-width: 600px) {
     .task-list { max-width: 540px; margin: 0 auto; }
     .filter-bar { max-width: 540px; margin: 0 auto; }
@@ -355,6 +404,13 @@
 </style>
 </head>
 <body>
+
+<!-- ── Update Banner ── -->
+<div class="update-banner" id="updateBanner">
+  <span>A new version is available!</span>
+  <button onclick="applyUpdate()">Update Now</button>
+  <button class="dismiss" onclick="dismissUpdate()">✕</button>
+</div>
 
 <!-- ══════ WELCOME / NAME PICKER ══════ -->
 <div class="welcome-screen" id="welcomeScreen">
@@ -399,6 +455,12 @@
 
 <!-- ══════ TASKS PAGE ══════ -->
 <div class="page active" id="pageTasks">
+  <!-- Pull to refresh indicator -->
+  <div class="pull-indicator" id="pullIndicator">
+    <span class="pull-icon">↓</span>&nbsp;
+    <span class="pull-text">Pull to refresh</span>
+  </div>
+
   <div class="filter-bar" id="filterBar">
     <div class="chip active" data-filter="all">All</div>
     <div class="chip" data-filter="todo">To Do</div>
@@ -436,8 +498,9 @@
   </div>
   <div class="settings-section">
     <h3>About</h3>
-    <p>Jackson House To-Dos v1.0<br>A family PWA built with love. 🏠<br><br>
-    Syncs automatically via Google Sheets every 30 seconds.</p>
+    <p>Jackson House To-Dos v2.0<br>A family PWA built with love. 🏠<br><br>
+    Syncs automatically via Google Sheets every 30 seconds.<br>
+    Pull down on the task list to refresh. Drag tasks to reorder.</p>
   </div>
 </div>
 
@@ -497,12 +560,11 @@
 
 <script>
 // ═══════════════════════════════════════
-// CONFIG — Hardcoded for the Jackson family
+// CONFIG
 // ═══════════════════════════════════════
+const APP_VERSION = '2.0';
 const FAMILY_MEMBERS = ['Tanner', 'Corrie', 'Penelope', 'Graham'];
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwHqYKfNXNn2hL4vMYa6lmsfqUoN2VGfSCwnqRPrmAUMaJ2EB0zr96czDGoyxp_NpGjDQ/exec';
-// ↑ Replace with your deployed Google Apps Script URL
-//   e.g. 'https://script.google.com/macros/s/AKfycbx.../exec'
 
 // ═══════════════════════════════════════
 // DATA & STATE
@@ -510,10 +572,12 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwHqYKfNXNn2hL4vMYa6
 const STORAGE_KEY = 'jackson-todos';
 const USER_KEY = 'jackson-todos-user';
 const CATEGORIES_KEY = 'jackson-todos-categories';
+const ORDER_KEY = 'jackson-todos-order';
 
 let tasks = [];
 let currentUser = null;
 let categories = ['Small Project', 'Big Project', 'Gift Idea', 'Maintenance', 'Shopping'];
+let customOrder = []; // array of task IDs in user's preferred order
 let editingId = null;
 let currentFilter = 'all';
 let currentPriority = 3;
@@ -525,6 +589,8 @@ function loadData() {
     currentUser = localStorage.getItem(USER_KEY) || null;
     const savedCats = localStorage.getItem(CATEGORIES_KEY);
     if (savedCats) categories = JSON.parse(savedCats);
+    const savedOrder = localStorage.getItem(ORDER_KEY);
+    if (savedOrder) customOrder = JSON.parse(savedOrder);
   } catch(e) { console.warn('Load error', e); }
 }
 
@@ -533,11 +599,62 @@ function saveData() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     if (currentUser) localStorage.setItem(USER_KEY, currentUser);
     localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+    localStorage.setItem(ORDER_KEY, JSON.stringify(customOrder));
   } catch(e) { console.warn('Save error', e); }
 }
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ═══════════════════════════════════════
+// VERSION CHECK & UPDATE
+// ═══════════════════════════════════════
+let waitingWorker = null;
+
+function applyUpdate() {
+  if (waitingWorker) {
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+  }
+  window.location.reload();
+}
+
+function dismissUpdate() {
+  document.getElementById('updateBanner').classList.remove('show');
+}
+
+// Listen for SW update messages
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'SW_UPDATED') {
+      document.getElementById('updateBanner').classList.add('show');
+    }
+  });
+
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // Check for updates every 60 seconds
+    setInterval(() => reg.update(), 60000);
+
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version installed, waiting to activate
+          waitingWorker = newWorker;
+          document.getElementById('updateBanner').classList.add('show');
+        }
+      });
+    });
+  }).catch(e => console.warn('SW error', e));
+
+  // When a new SW takes over, reload
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
 }
 
 // ═══════════════════════════════════════
@@ -622,8 +739,234 @@ function setSyncState(state) {
   }
 }
 
-// Auto-sync every 30 seconds
 setInterval(() => { if (isSheetsConfigured()) syncNow(); }, 30000);
+
+// ═══════════════════════════════════════
+// PULL TO REFRESH
+// ═══════════════════════════════════════
+(function initPullToRefresh() {
+  const page = document.getElementById('pageTasks');
+  const indicator = document.getElementById('pullIndicator');
+  const pullText = indicator.querySelector('.pull-text');
+  let startY = 0;
+  let pulling = false;
+  const THRESHOLD = 80;
+
+  page.addEventListener('touchstart', e => {
+    // Only start pull if scrolled to top
+    if (window.scrollY === 0 && !pulling) {
+      startY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  page.addEventListener('touchmove', e => {
+    if (startY === 0) return;
+    const dy = e.touches[0].clientY - startY;
+
+    if (dy > 10 && window.scrollY === 0) {
+      pulling = true;
+      const progress = Math.min(dy, THRESHOLD * 1.5);
+      indicator.style.height = Math.min(progress * 0.6, 50) + 'px';
+
+      if (dy >= THRESHOLD) {
+        indicator.classList.add('ready');
+        pullText.textContent = 'Release to refresh';
+      } else {
+        indicator.classList.remove('ready');
+        pullText.textContent = 'Pull to refresh';
+      }
+    }
+  }, { passive: true });
+
+  page.addEventListener('touchend', () => {
+    if (!pulling) { startY = 0; return; }
+    const indicator = document.getElementById('pullIndicator');
+    const pullText = indicator.querySelector('.pull-text');
+
+    if (indicator.classList.contains('ready')) {
+      indicator.classList.remove('ready');
+      indicator.classList.add('refreshing');
+      pullText.textContent = 'Refreshing...';
+      indicator.style.height = '36px';
+
+      syncNow().finally(() => {
+        setTimeout(() => {
+          indicator.classList.remove('refreshing');
+          indicator.style.height = '0';
+          pullText.textContent = 'Pull to refresh';
+        }, 500);
+      });
+    } else {
+      indicator.style.height = '0';
+      indicator.classList.remove('ready');
+    }
+
+    pulling = false;
+    startY = 0;
+  }, { passive: true });
+})();
+
+// ═══════════════════════════════════════
+// DRAG AND DROP REORDER
+// ═══════════════════════════════════════
+let dragState = {
+  active: false,
+  taskId: null,
+  startY: 0,
+  currentY: 0,
+  element: null,
+  placeholder: null,
+  longPressTimer: null,
+  moved: false
+};
+
+function initDragOnCard(card) {
+  // Touch-based drag (mobile)
+  card.addEventListener('touchstart', onDragTouchStart, { passive: false });
+  // Mouse-based drag via the handle
+  const handle = card.querySelector('.drag-handle');
+  if (handle) {
+    handle.addEventListener('mousedown', onDragMouseStart);
+  }
+}
+
+function onDragTouchStart(e) {
+  // Only start drag from the drag handle area
+  const handle = e.currentTarget.querySelector('.drag-handle');
+  if (!handle) return;
+
+  const touch = e.touches[0];
+  const handleRect = handle.getBoundingClientRect();
+
+  // Check if touch is near the handle (right side of card)
+  if (touch.clientX < handleRect.left - 10) return;
+
+  e.preventDefault();
+  const card = e.currentTarget;
+  startDrag(card, touch.clientY);
+
+  const onMove = (ev) => {
+    if (!dragState.active) return;
+    ev.preventDefault();
+    moveDrag(ev.touches[0].clientY);
+  };
+  const onEnd = () => {
+    endDrag();
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onEnd);
+  };
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onEnd, { passive: true });
+}
+
+function onDragMouseStart(e) {
+  e.preventDefault();
+  const card = e.target.closest('.task-card');
+  if (!card) return;
+  startDrag(card, e.clientY);
+
+  const onMove = (ev) => {
+    if (!dragState.active) return;
+    moveDrag(ev.clientY);
+  };
+  const onEnd = () => {
+    endDrag();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onEnd);
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onEnd);
+}
+
+function startDrag(card, y) {
+  dragState.active = true;
+  dragState.taskId = card.dataset.id;
+  dragState.startY = y;
+  dragState.currentY = y;
+  dragState.element = card;
+  dragState.moved = false;
+  card.classList.add('dragging');
+}
+
+function moveDrag(y) {
+  dragState.currentY = y;
+  dragState.moved = true;
+
+  // Clear all drag-over indicators
+  document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
+    el.classList.remove('drag-over-above', 'drag-over-below');
+  });
+
+  // Find which card we're over
+  const cards = [...document.querySelectorAll('.task-card:not(.dragging)')];
+  for (const card of cards) {
+    const rect = card.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (y >= rect.top && y <= rect.bottom) {
+      if (y < mid) {
+        card.classList.add('drag-over-above');
+      } else {
+        card.classList.add('drag-over-below');
+      }
+      break;
+    }
+  }
+}
+
+function endDrag() {
+  if (!dragState.active) return;
+
+  // Find the drop target
+  const overAbove = document.querySelector('.drag-over-above');
+  const overBelow = document.querySelector('.drag-over-below');
+  const targetCard = overAbove || overBelow;
+
+  if (targetCard && dragState.moved && targetCard.dataset.id !== dragState.taskId) {
+    const targetId = targetCard.dataset.id;
+    reorderTask(dragState.taskId, targetId, !!overBelow);
+  }
+
+  // Clean up
+  if (dragState.element) dragState.element.classList.remove('dragging');
+  document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
+    el.classList.remove('drag-over-above', 'drag-over-below');
+  });
+  dragState.active = false;
+  dragState.taskId = null;
+  dragState.element = null;
+  dragState.moved = false;
+}
+
+function reorderTask(movedId, targetId, insertAfter) {
+  // Build the current display order of task IDs
+  const displayedCards = [...document.querySelectorAll('.task-card[data-id]')];
+  const displayOrder = displayedCards.map(c => c.dataset.id);
+
+  // Remove the moved task from the order
+  const filtered = displayOrder.filter(id => id !== movedId);
+
+  // Find where the target is now
+  const targetIdx = filtered.indexOf(targetId);
+  const insertIdx = insertAfter ? targetIdx + 1 : targetIdx;
+
+  // Insert at new position
+  filtered.splice(insertIdx, 0, movedId);
+
+  // Save as custom order — assign sortOrder values
+  filtered.forEach((id, i) => {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      task.sortOrder = i;
+      task.updated = Date.now();
+    }
+  });
+
+  // Also keep a full custom order in case we need it
+  customOrder = filtered;
+  saveData();
+  renderTasks();
+  if (isSheetsConfigured()) syncNow();
+}
 
 // ═══════════════════════════════════════
 // RENDERING
@@ -637,9 +980,13 @@ function renderTasks() {
   else if (currentFilter === 'high') filtered = filtered.filter(t => t.priority >= 4 && !t.done);
   else if (currentFilter === 'mine') filtered = filtered.filter(t => t.assignee === currentUser && !t.done);
 
-  // Sort: undone first, then priority desc, then created desc
+  // Sort: undone first, then by custom sortOrder (if set), then priority desc, then created desc
   filtered.sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
+    // If both have a sortOrder, use it
+    const aOrder = a.sortOrder !== undefined ? a.sortOrder : 9999;
+    const bOrder = b.sortOrder !== undefined ? b.sortOrder : 9999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
     if (b.priority !== a.priority) return b.priority - a.priority;
     return (b.created || 0) - (a.created || 0);
   });
@@ -653,37 +1000,31 @@ function renderTasks() {
     return;
   }
 
-  // Group by category
-  const groups = {};
-  filtered.forEach(t => {
-    const cat = t.category || 'Uncategorized';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(t);
-  });
-
   let html = '';
-  for (const [cat, items] of Object.entries(groups)) {
-    html += `<div class="category-header">${cat} (${items.length})</div>`;
-    items.forEach(t => {
-      const priorityLabel = ['', 'Low', 'Normal', 'Medium', 'High', 'Urgent'][t.priority] || '';
-      html += `
-        <div class="task-card priority-${t.priority} ${t.done ? 'done' : ''}" data-id="${t.id}">
-          <div class="priority-stripe"></div>
-          <div class="task-top">
-            <div class="task-check" onclick="event.stopPropagation(); toggleDone('${t.id}')"></div>
-            <div class="task-info" onclick="openTaskModal('${t.id}')">
-              <div class="task-name">${esc(t.name)}</div>
-              ${t.desc ? `<div class="task-desc">${esc(t.desc)}</div>` : ''}
-              <div class="task-meta">
-                ${t.assignee ? `<span class="tag assignee">👤 ${esc(t.assignee)}</span>` : ''}
-                ${t.priority >= 4 ? `<span class="tag priority-high">⚡ ${priorityLabel}</span>` : `<span class="tag">P${t.priority}</span>`}
-              </div>
+  filtered.forEach(t => {
+    const priorityLabel = ['', 'Low', 'Normal', 'Medium', 'High', 'Urgent'][t.priority] || '';
+    html += `
+      <div class="task-card priority-${t.priority} ${t.done ? 'done' : ''}" data-id="${t.id}">
+        <div class="priority-stripe"></div>
+        <div class="drag-handle">⠿</div>
+        <div class="task-top">
+          <div class="task-check" onclick="event.stopPropagation(); toggleDone('${t.id}')"></div>
+          <div class="task-info" onclick="openTaskModal('${t.id}')">
+            <div class="task-name">${esc(t.name)}</div>
+            ${t.desc ? `<div class="task-desc">${esc(t.desc)}</div>` : ''}
+            <div class="task-meta">
+              ${t.assignee ? `<span class="tag assignee">👤 ${esc(t.assignee)}</span>` : ''}
+              ${t.category ? `<span class="tag">${esc(t.category)}</span>` : ''}
+              ${t.priority >= 4 ? `<span class="tag priority-high">⚡ ${priorityLabel}</span>` : `<span class="tag">P${t.priority}</span>`}
             </div>
           </div>
-        </div>`;
-    });
-  }
+        </div>
+      </div>`;
+  });
   list.innerHTML = html;
+
+  // Attach drag handlers to new cards
+  list.querySelectorAll('.task-card').forEach(initDragOnCard);
 }
 
 function esc(s) {
@@ -708,6 +1049,9 @@ function toggleDone(id) {
 }
 
 function openTaskModal(id) {
+  // Don't open modal if we were dragging
+  if (dragState.moved) return;
+
   editingId = id || null;
   const modal = document.getElementById('taskModal');
   const title = document.getElementById('modalTitle');
@@ -783,6 +1127,7 @@ function deleteTask() {
   if (!editingId) return;
   if (confirm('Delete this task?')) {
     tasks = tasks.filter(t => t.id !== editingId);
+    customOrder = customOrder.filter(id => id !== editingId);
     saveData();
     renderTasks();
     closeTaskModal();
@@ -791,7 +1136,7 @@ function deleteTask() {
 }
 
 // ═══════════════════════════════════════
-// SETTINGS — Categories only (members are hardcoded)
+// SETTINGS
 // ═══════════════════════════════════════
 function renderCategories() {
   const list = document.getElementById('categoryList');
@@ -895,20 +1240,13 @@ document.getElementById('newCategoryInput').addEventListener('keydown', e => {
 loadData();
 
 if (currentUser) {
-  // Returning user — skip welcome, go straight to tasks
   document.getElementById('welcomeScreen').classList.add('hidden');
   document.getElementById('currentUserChip').textContent = '👤 ' + currentUser;
   document.getElementById('settingsUserName').textContent = currentUser;
   renderTasks();
   syncNow();
 } else {
-  // First visit — show name picker
   setSyncState('local');
-}
-
-// Register service worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW error', e));
 }
 </script>
 </body>
