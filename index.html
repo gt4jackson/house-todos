@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#e94560">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%231a1a2e'/><text x='256' y='340' font-size='280' text-anchor='middle' fill='%23e94560'>🏠</text></svg>">
+<title>Jackson House To-Dos</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --card: #0f3460;
+    --accent: #e94560;
+    --accent-light: #ff6b81;
+    --text: #eee;
+    --text-dim: #8892b0;
+    --green: #2ecc71;
+    --yellow: #f1c40f;
+    --orange: #e67e22;
+    --red: #e74c3c;
+    --border: rgba(255,255,255,0.08);
+    --radius: 14px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: calc(70px + var(--safe-bottom));
+    overflow-x: hidden;
+  }
+
+  /* ── Welcome Screen ── */
+  .welcome-screen {
+    position: fixed; inset: 0; z-index: 500;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 24px; text-align: center;
+  }
+  .welcome-screen.hidden { display: none; }
+  .welcome-icon { font-size: 4rem; margin-bottom: 16px; }
+  .welcome-screen h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; }
+  .welcome-screen h1 span { color: var(--accent); }
+  .welcome-subtitle { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 36px; }
+  .welcome-prompt { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+  .name-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    width: 100%; max-width: 320px;
+  }
+  .name-btn {
+    padding: 16px 12px; border-radius: var(--radius);
+    background: var(--surface); border: 2px solid var(--border);
+    color: var(--text); font-size: 1.1rem; font-weight: 600;
+    cursor: pointer; transition: 0.2s;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .name-btn:hover, .name-btn:active {
+    border-color: var(--accent); background: rgba(233,69,96,0.1);
+  }
+  .name-btn .avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--card); display: flex; align-items: center;
+    justify-content: center; font-size: 1.4rem;
+  }
+
+  /* ── Header ── */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 1.2rem; font-weight: 700; }
+  .header h1 span { color: var(--accent); }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .current-user {
+    font-size: 0.8rem; color: var(--accent-light);
+    padding: 4px 10px; border-radius: 12px;
+    background: rgba(233,69,96,0.15);
+    cursor: pointer;
+  }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: 0.2s;
+  }
+  .icon-btn:hover { background: var(--accent); }
+
+  /* ── Sync status bar ── */
+  .sync-bar {
+    background: var(--surface); padding: 6px 16px;
+    font-size: 0.75rem; color: var(--text-dim);
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); flex-shrink: 0;
+  }
+  .sync-dot.offline { background: var(--orange); }
+  .sync-dot.error { background: var(--red); }
+  .sync-dot.syncing { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    padding: 10px 16px;
+    display: flex; gap: 8px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .chip {
+    padding: 6px 14px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 0.8rem;
+    white-space: nowrap; cursor: pointer; transition: 0.2s;
+    user-select: none;
+  }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Task list ── */
+  .task-list { padding: 8px 12px; }
+  .category-header {
+    font-size: 0.75rem; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 12px 4px 6px;
+  }
+  .task-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+    margin-bottom: 8px; cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative; overflow: hidden;
+  }
+  .task-card:active { transform: scale(0.98); }
+  .task-card .priority-stripe {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  }
+  .priority-1 .priority-stripe { background: var(--text-dim); }
+  .priority-2 .priority-stripe { background: var(--green); }
+  .priority-3 .priority-stripe { background: var(--yellow); }
+  .priority-4 .priority-stripe { background: var(--orange); }
+  .priority-5 .priority-stripe { background: var(--red); }
+
+  .task-top { display: flex; align-items: flex-start; gap: 10px; }
+  .task-check {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--text-dim); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: 0.2s; margin-top: 1px;
+  }
+  .task-check:hover { border-color: var(--green); }
+  .task-card.done .task-check { background: var(--green); border-color: var(--green); }
+  .task-card.done .task-check::after { content: '✓'; color: #fff; font-size: 14px; font-weight: 700; }
+  .task-card.done .task-name { text-decoration: line-through; opacity: 0.5; }
+
+  .task-info { flex: 1; min-width: 0; }
+  .task-name { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+  .task-desc {
+    font-size: 0.8rem; color: var(--text-dim);
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .task-meta {
+    display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 10px;
+    background: rgba(255,255,255,0.06); color: var(--text-dim);
+  }
+  .tag.assignee { background: rgba(233,69,96,0.15); color: var(--accent-light); }
+  .tag.priority-high { background: rgba(231,76,60,0.15); color: var(--red); }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--text-dim);
+  }
+  .empty-state .emoji { font-size: 3rem; margin-bottom: 12px; }
+  .empty-state p { font-size: 0.9rem; }
+
+  /* ── Bottom nav ── */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 8px 0 calc(8px + var(--safe-bottom));
+    z-index: 100;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 0.65rem; color: var(--text-dim); cursor: pointer;
+    padding: 4px 12px; transition: 0.2s;
+  }
+  .nav-item.active { color: var(--accent); }
+  .nav-item .nav-icon { font-size: 1.3rem; }
+
+  /* ── FAB ── */
+  .fab {
+    position: fixed; bottom: calc(80px + var(--safe-bottom));
+    right: 16px; width: 56px; height: 56px;
+    border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 1.8rem; border: none;
+    box-shadow: 0 4px 20px rgba(233,69,96,0.4);
+    cursor: pointer; z-index: 99; transition: 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .fab:hover { transform: scale(1.1); }
+
+  /* ── Modal / Drawer ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 200; display: none; align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    width: 100%; max-width: 500px; max-height: 90dvh;
+    overflow-y: auto; padding: 20px 16px calc(20px + var(--safe-bottom));
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-header h2 { font-size: 1.1rem; }
+  .close-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--card); border: none; color: var(--text);
+    font-size: 1.2rem; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+  }
+
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 0.8rem; color: var(--text-dim);
+    margin-bottom: 4px; font-weight: 500;
+  }
+  .form-group input, .form-group textarea, .form-group select {
+    width: 100%; padding: 10px 12px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.9rem; font-family: inherit;
+    outline: none; transition: 0.2s;
+  }
+  .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+    border-color: var(--accent);
+  }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-group select { appearance: none; cursor: pointer; }
+
+  .priority-selector {
+    display: flex; gap: 6px;
+  }
+  .priority-btn {
+    flex: 1; padding: 8px; border-radius: 10px;
+    background: var(--card); border: 2px solid transparent;
+    color: var(--text); font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; text-align: center; transition: 0.2s;
+  }
+  .priority-btn.selected { border-color: var(--accent); background: rgba(233,69,96,0.15); }
+  .priority-btn:nth-child(1) { color: var(--text-dim); }
+  .priority-btn:nth-child(2) { color: var(--green); }
+  .priority-btn:nth-child(3) { color: var(--yellow); }
+  .priority-btn:nth-child(4) { color: var(--orange); }
+  .priority-btn:nth-child(5) { color: var(--red); }
+
+  .btn-primary {
+    width: 100%; padding: 14px; border-radius: 12px;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 1rem; font-weight: 600; cursor: pointer;
+    transition: 0.2s; margin-top: 8px;
+  }
+  .btn-primary:hover { background: var(--accent-light); }
+
+  .btn-danger {
+    width: 100%; padding: 12px; border-radius: 12px;
+    background: transparent; color: var(--red); border: 1px solid var(--red);
+    font-size: 0.9rem; font-weight: 500; cursor: pointer;
+    transition: 0.2s; margin-top: 8px;
+  }
+  .btn-danger:hover { background: rgba(231,76,60,0.1); }
+
+  /* ── Pages ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Settings page ── */
+  .settings-section {
+    padding: 16px; border-bottom: 1px solid var(--border);
+  }
+  .settings-section h3 {
+    font-size: 0.9rem; margin-bottom: 8px;
+  }
+  .settings-section p {
+    font-size: 0.8rem; color: var(--text-dim); margin-bottom: 10px;
+  }
+  .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .member-tag {
+    padding: 4px 10px; border-radius: 12px;
+    background: rgba(233,69,96,0.15); color: var(--accent-light);
+    font-size: 0.8rem; display: flex; align-items: center; gap: 4px;
+  }
+  .add-member-row { display: flex; gap: 6px; }
+  .add-member-row input { flex: 1; }
+  .add-member-row button {
+    padding: 8px 14px; border-radius: 10px;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 0.85rem; cursor: pointer;
+  }
+  .switch-user-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 16px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.9rem; cursor: pointer;
+    transition: 0.2s;
+  }
+  .switch-user-btn:hover { border-color: var(--accent); }
+
+  /* ── Stats ── */
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    padding: 16px;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; text-align: center;
+  }
+  .stat-card .num { font-size: 2rem; font-weight: 700; color: var(--accent); }
+  .stat-card .label { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+
+  /* Responsive for larger screens */
+  @media (min-width: 600px) {
+    .task-list { max-width: 540px; margin: 0 auto; }
+    .filter-bar { max-width: 540px; margin: 0 auto; }
+    .stats-grid { max-width: 540px; margin: 0 auto; }
+    .settings-section { max-width: 540px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════ WELCOME / NAME PICKER ══════ -->
+<div class="welcome-screen" id="welcomeScreen">
+  <div class="welcome-icon">🏠</div>
+  <h1><span>Jackson</span> House To-Dos</h1>
+  <p class="welcome-subtitle">The family task list</p>
+  <p class="welcome-prompt">Who are you?</p>
+  <div class="name-grid">
+    <button class="name-btn" onclick="selectUser('Tanner')">
+      <div class="avatar">👨</div>
+      Tanner
+    </button>
+    <button class="name-btn" onclick="selectUser('Corrie')">
+      <div class="avatar">👩</div>
+      Corrie
+    </button>
+    <button class="name-btn" onclick="selectUser('Penelope')">
+      <div class="avatar">👧</div>
+      Penelope
+    </button>
+    <button class="name-btn" onclick="selectUser('Graham')">
+      <div class="avatar">👦</div>
+      Graham
+    </button>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<div class="header">
+  <h1>🏠 <span>Jackson</span> To-Dos</h1>
+  <div class="header-actions">
+    <div class="current-user" id="currentUserChip" onclick="showWelcome()"></div>
+    <button class="icon-btn" onclick="syncNow()" title="Sync now">🔄</button>
+  </div>
+</div>
+
+<!-- ── Sync bar ── -->
+<div class="sync-bar">
+  <div class="sync-dot" id="syncDot"></div>
+  <span id="syncStatus">Connecting...</span>
+</div>
+
+<!-- ══════ TASKS PAGE ══════ -->
+<div class="page active" id="pageTasks">
+  <div class="filter-bar" id="filterBar">
+    <div class="chip active" data-filter="all">All</div>
+    <div class="chip" data-filter="todo">To Do</div>
+    <div class="chip" data-filter="done">Done</div>
+    <div class="chip" data-filter="high">High Priority</div>
+    <div class="chip" data-filter="mine">Mine</div>
+  </div>
+  <div class="task-list" id="taskList"></div>
+  <button class="fab" onclick="openTaskModal()">+</button>
+</div>
+
+<!-- ══════ STATS PAGE ══════ -->
+<div class="page" id="pageStats">
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="task-list" id="recentDone"></div>
+</div>
+
+<!-- ══════ SETTINGS PAGE ══════ -->
+<div class="page" id="pageSettings">
+  <div class="settings-section">
+    <h3>You're logged in as</h3>
+    <button class="switch-user-btn" onclick="showWelcome()">
+      <span id="settingsUserName"></span>
+      <span style="color:var(--text-dim)">— tap to switch</span>
+    </button>
+  </div>
+  <div class="settings-section">
+    <h3>Categories</h3>
+    <p>Organize tasks into groups.</p>
+    <div class="member-list" id="categoryList"></div>
+    <div class="add-member-row">
+      <input type="text" id="newCategoryInput" placeholder="Enter category...">
+      <button onclick="addCategory()">Add</button>
+    </div>
+  </div>
+  <div class="settings-section">
+    <h3>About</h3>
+    <p>Jackson House To-Dos v1.0<br>A family PWA built with love. 🏠<br><br>
+    Syncs automatically via Google Sheets every 30 seconds.</p>
+  </div>
+</div>
+
+<!-- ── Bottom Nav ── -->
+<div class="bottom-nav">
+  <div class="nav-item active" data-page="pageTasks">
+    <span class="nav-icon">📋</span>
+    Tasks
+  </div>
+  <div class="nav-item" data-page="pageStats">
+    <span class="nav-icon">📊</span>
+    Stats
+  </div>
+  <div class="nav-item" data-page="pageSettings">
+    <span class="nav-icon">⚙️</span>
+    Settings
+  </div>
+</div>
+
+<!-- ══════ TASK MODAL ══════ -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">New Task</h2>
+      <button class="close-btn" onclick="closeTaskModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Task Name *</label>
+      <input type="text" id="taskName" placeholder="e.g. Hang picture in hallway">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="taskDesc" placeholder="Any details, measurements, links..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="taskCategory"></select>
+    </div>
+    <div class="form-group">
+      <label>Priority (1 = low, 5 = urgent)</label>
+      <div class="priority-selector" id="prioritySelector">
+        <div class="priority-btn" data-p="1" onclick="setPriority(1)">1</div>
+        <div class="priority-btn" data-p="2" onclick="setPriority(2)">2</div>
+        <div class="priority-btn selected" data-p="3" onclick="setPriority(3)">3</div>
+        <div class="priority-btn" data-p="4" onclick="setPriority(4)">4</div>
+        <div class="priority-btn" data-p="5" onclick="setPriority(5)">5</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Assign To (optional)</label>
+      <select id="taskAssignee"></select>
+    </div>
+    <button class="btn-primary" id="saveTaskBtn" onclick="saveTask()">Add Task</button>
+    <button class="btn-danger" id="deleteTaskBtn" onclick="deleteTask()" style="display:none">Delete Task</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// CONFIG — Hardcoded for the Jackson family
+// ═══════════════════════════════════════
+const FAMILY_MEMBERS = ['Tanner', 'Corrie', 'Penelope', 'Graham'];
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwHqYKfNXNn2hL4vMYa6lmsfqUoN2VGfSCwnqRPrmAUMaJ2EB0zr96czDGoyxp_NpGjDQ/exec';
+// ↑ Replace with your deployed Google Apps Script URL
+//   e.g. 'https://script.google.com/macros/s/AKfycbx.../exec'
+
+// ═══════════════════════════════════════
+// DATA & STATE
+// ═══════════════════════════════════════
+const STORAGE_KEY = 'jackson-todos';
+const USER_KEY = 'jackson-todos-user';
+const CATEGORIES_KEY = 'jackson-todos-categories';
+
+let tasks = [];
+let currentUser = null;
+let categories = ['Small Project', 'Big Project', 'Gift Idea', 'Maintenance', 'Shopping'];
+let editingId = null;
+let currentFilter = 'all';
+let currentPriority = 3;
+
+function loadData() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) tasks = JSON.parse(saved);
+    currentUser = localStorage.getItem(USER_KEY) || null;
+    const savedCats = localStorage.getItem(CATEGORIES_KEY);
+    if (savedCats) categories = JSON.parse(savedCats);
+  } catch(e) { console.warn('Load error', e); }
+}
+
+function saveData() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    if (currentUser) localStorage.setItem(USER_KEY, currentUser);
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+  } catch(e) { console.warn('Save error', e); }
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ═══════════════════════════════════════
+// USER SELECTION
+// ═══════════════════════════════════════
+function selectUser(name) {
+  currentUser = name;
+  localStorage.setItem(USER_KEY, name);
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  document.getElementById('currentUserChip').textContent = '👤 ' + name;
+  document.getElementById('settingsUserName').textContent = name;
+  renderTasks();
+  syncNow();
+}
+
+function showWelcome() {
+  document.getElementById('welcomeScreen').classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════
+// GOOGLE SHEETS SYNC
+// ═══════════════════════════════════════
+let syncState = 'local';
+
+function isSheetsConfigured() {
+  return SHEETS_URL && !SHEETS_URL.includes('__PASTE_');
+}
+
+async function syncNow() {
+  if (!isSheetsConfigured()) {
+    setSyncState('local');
+    return;
+  }
+  setSyncState('syncing');
+  try {
+    const resp = await fetch(SHEETS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sync', tasks })
+    });
+    const data = await resp.json();
+    if (data.tasks) {
+      tasks = mergeTasks(tasks, data.tasks);
+      saveData();
+      renderTasks();
+    }
+    setSyncState('synced');
+  } catch(e) {
+    console.error('Sync failed', e);
+    setSyncState('error');
+  }
+}
+
+function mergeTasks(local, remote) {
+  const map = new Map();
+  local.forEach(t => map.set(t.id, t));
+  remote.forEach(t => {
+    const existing = map.get(t.id);
+    if (!existing || (t.updated || 0) >= (existing.updated || 0)) {
+      map.set(t.id, t);
+    }
+  });
+  return Array.from(map.values());
+}
+
+function setSyncState(state) {
+  syncState = state;
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncStatus');
+  dot.className = 'sync-dot';
+  if (state === 'local') {
+    dot.classList.add('offline');
+    label.textContent = 'Local mode — Google Sheets not connected';
+  } else if (state === 'syncing') {
+    dot.classList.add('syncing');
+    label.textContent = 'Syncing...';
+  } else if (state === 'synced') {
+    label.textContent = 'Synced ' + new Date().toLocaleTimeString();
+  } else if (state === 'error') {
+    dot.classList.add('error');
+    label.textContent = 'Sync error — tap 🔄 to retry';
+  }
+}
+
+// Auto-sync every 30 seconds
+setInterval(() => { if (isSheetsConfigured()) syncNow(); }, 30000);
+
+// ═══════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════
+function renderTasks() {
+  const list = document.getElementById('taskList');
+  let filtered = [...tasks];
+
+  if (currentFilter === 'todo') filtered = filtered.filter(t => !t.done);
+  else if (currentFilter === 'done') filtered = filtered.filter(t => t.done);
+  else if (currentFilter === 'high') filtered = filtered.filter(t => t.priority >= 4 && !t.done);
+  else if (currentFilter === 'mine') filtered = filtered.filter(t => t.assignee === currentUser && !t.done);
+
+  // Sort: undone first, then priority desc, then created desc
+  filtered.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return (b.created || 0) - (a.created || 0);
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">${currentFilter === 'done' ? '🎉' : '✨'}</div>
+        <p>${currentFilter === 'done' ? 'No completed tasks yet' : 'No tasks here — tap + to add one!'}</p>
+      </div>`;
+    return;
+  }
+
+  // Group by category
+  const groups = {};
+  filtered.forEach(t => {
+    const cat = t.category || 'Uncategorized';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(t);
+  });
+
+  let html = '';
+  for (const [cat, items] of Object.entries(groups)) {
+    html += `<div class="category-header">${cat} (${items.length})</div>`;
+    items.forEach(t => {
+      const priorityLabel = ['', 'Low', 'Normal', 'Medium', 'High', 'Urgent'][t.priority] || '';
+      html += `
+        <div class="task-card priority-${t.priority} ${t.done ? 'done' : ''}" data-id="${t.id}">
+          <div class="priority-stripe"></div>
+          <div class="task-top">
+            <div class="task-check" onclick="event.stopPropagation(); toggleDone('${t.id}')"></div>
+            <div class="task-info" onclick="openTaskModal('${t.id}')">
+              <div class="task-name">${esc(t.name)}</div>
+              ${t.desc ? `<div class="task-desc">${esc(t.desc)}</div>` : ''}
+              <div class="task-meta">
+                ${t.assignee ? `<span class="tag assignee">👤 ${esc(t.assignee)}</span>` : ''}
+                ${t.priority >= 4 ? `<span class="tag priority-high">⚡ ${priorityLabel}</span>` : `<span class="tag">P${t.priority}</span>`}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+  list.innerHTML = html;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// ═══════════════════════════════════════
+// TASK ACTIONS
+// ═══════════════════════════════════════
+function toggleDone(id) {
+  const t = tasks.find(t => t.id === id);
+  if (t) {
+    t.done = !t.done;
+    t.updated = Date.now();
+    if (t.done) t.completedAt = Date.now();
+    saveData();
+    renderTasks();
+    if (isSheetsConfigured()) syncNow();
+  }
+}
+
+function openTaskModal(id) {
+  editingId = id || null;
+  const modal = document.getElementById('taskModal');
+  const title = document.getElementById('modalTitle');
+  const saveBtn = document.getElementById('saveTaskBtn');
+  const delBtn = document.getElementById('deleteTaskBtn');
+
+  populateDropdowns();
+
+  if (id) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    title.textContent = 'Edit Task';
+    saveBtn.textContent = 'Save Changes';
+    delBtn.style.display = 'block';
+    document.getElementById('taskName').value = t.name;
+    document.getElementById('taskDesc').value = t.desc || '';
+    document.getElementById('taskCategory').value = t.category || '';
+    document.getElementById('taskAssignee').value = t.assignee || '';
+    setPriority(t.priority || 3);
+  } else {
+    title.textContent = 'New Task';
+    saveBtn.textContent = 'Add Task';
+    delBtn.style.display = 'none';
+    document.getElementById('taskName').value = '';
+    document.getElementById('taskDesc').value = '';
+    document.getElementById('taskCategory').value = categories[0] || '';
+    document.getElementById('taskAssignee').value = '';
+    setPriority(3);
+  }
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('taskName').focus(), 300);
+}
+
+function closeTaskModal() {
+  document.getElementById('taskModal').classList.remove('open');
+  editingId = null;
+}
+
+function setPriority(p) {
+  currentPriority = p;
+  document.querySelectorAll('.priority-btn').forEach(btn => {
+    btn.classList.toggle('selected', parseInt(btn.dataset.p) === p);
+  });
+}
+
+function saveTask() {
+  const name = document.getElementById('taskName').value.trim();
+  if (!name) { document.getElementById('taskName').focus(); return; }
+
+  const data = {
+    name,
+    desc: document.getElementById('taskDesc').value.trim(),
+    category: document.getElementById('taskCategory').value,
+    priority: currentPriority,
+    assignee: document.getElementById('taskAssignee').value,
+    updated: Date.now()
+  };
+
+  if (editingId) {
+    const t = tasks.find(t => t.id === editingId);
+    if (t) Object.assign(t, data);
+  } else {
+    tasks.push({ id: genId(), ...data, done: false, created: Date.now(), createdBy: currentUser });
+  }
+
+  saveData();
+  renderTasks();
+  closeTaskModal();
+  if (isSheetsConfigured()) syncNow();
+}
+
+function deleteTask() {
+  if (!editingId) return;
+  if (confirm('Delete this task?')) {
+    tasks = tasks.filter(t => t.id !== editingId);
+    saveData();
+    renderTasks();
+    closeTaskModal();
+    if (isSheetsConfigured()) syncNow();
+  }
+}
+
+// ═══════════════════════════════════════
+// SETTINGS — Categories only (members are hardcoded)
+// ═══════════════════════════════════════
+function renderCategories() {
+  const list = document.getElementById('categoryList');
+  list.innerHTML = categories.map(c =>
+    `<span class="member-tag">${esc(c)}</span>`
+  ).join('');
+}
+
+function addCategory() {
+  const input = document.getElementById('newCategoryInput');
+  const name = input.value.trim();
+  if (name && !categories.includes(name)) {
+    categories.push(name);
+    saveData();
+    renderCategories();
+    input.value = '';
+  }
+}
+
+function populateDropdowns() {
+  const catSel = document.getElementById('taskCategory');
+  catSel.innerHTML = categories.map(c =>
+    `<option value="${esc(c)}">${esc(c)}</option>`
+  ).join('') + '<option value="">None</option>';
+
+  const assignSel = document.getElementById('taskAssignee');
+  assignSel.innerHTML = '<option value="">Unassigned</option>' +
+    FAMILY_MEMBERS.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+}
+
+// ═══════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════
+function renderStats() {
+  const total = tasks.length;
+  const done = tasks.filter(t => t.done).length;
+  const todo = total - done;
+  const highPri = tasks.filter(t => t.priority >= 4 && !t.done).length;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="num">${todo}</div><div class="label">To Do</div></div>
+    <div class="stat-card"><div class="num">${done}</div><div class="label">Completed</div></div>
+    <div class="stat-card"><div class="num">${highPri}</div><div class="label">High Priority</div></div>
+    <div class="stat-card"><div class="num">${total}</div><div class="label">Total Tasks</div></div>
+  `;
+
+  const recent = tasks.filter(t => t.done).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)).slice(0, 5);
+  document.getElementById('recentDone').innerHTML = recent.length ?
+    '<div class="category-header">Recently Completed</div>' +
+    recent.map(t => `
+      <div class="task-card done priority-${t.priority}">
+        <div class="priority-stripe"></div>
+        <div class="task-top">
+          <div class="task-check"></div>
+          <div class="task-info">
+            <div class="task-name">${esc(t.name)}</div>
+            ${t.completedAt ? `<div class="task-desc">Completed ${new Date(t.completedAt).toLocaleDateString()}</div>` : ''}
+          </div>
+        </div>
+      </div>`).join('') : '';
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById(item.dataset.page).classList.add('active');
+
+    document.querySelector('.fab').style.display =
+      item.dataset.page === 'pageTasks' ? 'flex' : 'none';
+
+    if (item.dataset.page === 'pageStats') renderStats();
+    if (item.dataset.page === 'pageSettings') renderCategories();
+  });
+});
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentFilter = chip.dataset.filter;
+    renderTasks();
+  });
+});
+
+document.getElementById('taskModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeTaskModal();
+});
+
+document.getElementById('newCategoryInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addCategory();
+});
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+loadData();
+
+if (currentUser) {
+  // Returning user — skip welcome, go straight to tasks
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  document.getElementById('currentUserChip').textContent = '👤 ' + currentUser;
+  document.getElementById('settingsUserName').textContent = currentUser;
+  renderTasks();
+  syncNow();
+} else {
+  // First visit — show name picker
+  setSyncState('local');
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW error', e));
+}
+</script>
+</body>
+</html>
